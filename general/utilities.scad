@@ -5,7 +5,7 @@
  * Dual licenced under Creative Commons Attribution-Share Alike 3.0 and LGPL2 or later
  */
 
-include <MCAD/general/constants.scad>
+include <../general/constants.scad>
 
 
 /******************** Disance Poins ******************************/

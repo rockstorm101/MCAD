@@ -34,6 +34,21 @@ module test_threads ($fa=5, $fs=0.1)
     // Rohloff hub thread:
     translate ([65, 0, 0])
     metric_thread(34, 1, 10, internal=true, n_starts=6);
+
+    // Cylinder with internal M8 thread and chamfers
+    translate ([95, 0, 0]) {
+        let(OD = 12, T = 8, P = 1.25, L = 10) {
+            difference() {
+                cylinder(d=OD, h=L);
+                chamfered_thread(L, internal = true) {
+                    metric_thread(T, P, L);
+                    chamfer_cylinder(T-2*P, T+0.5, internal = true);
+                    chamfer_cylinder(T-2*P, T+0.5, internal = true);
+                }
+            }
+        }
+    }
+
 }
 
 // ----------------------------------------------------------------------------
@@ -44,30 +59,138 @@ use <../scad-utils/transformations.scad>
 
 
 // ----------------------------------------------------------------------------
-// internal - true = clearances for internal thread (e.g., a nut).
-//            false = clearances for external thread (e.g., a bolt).
-//            (Internal threads should be "cut out" from a solid using
-//            difference()).
-// n_starts - Number of thread starts (e.g., DNA, a "double helix," has
-//            n_starts=2).  See wikipedia Screw_thread.
+// Metric Threads in accordance with ISO 68-1
+// ----------------------------------------------------------------------------
+// diameter  - nominal diameter of thread in mm. (e.g. 10 for an M10 thread)
+// pitch     - distance in mm from the crest of one thread to the next.
+// length    - overall axial length of thread in mm.
+// internal  - true = clearances for internal thread (e.g., a nut).
+//             false = clearances for external thread (e.g., a bolt).
+//             (Internal threads should be "cut out" from a solid using
+//             difference()).
+// clearance - additional clearance to add in mm. Teeth are effectively
+//             shifted inwards (outwards) for external (internal) threads by
+//             this amount.
+// n_starts  - Number of thread starts (e.g., DNA, a "double helix," has
+//             n_starts=2).  See Wikipedia Screw_thread.
 module metric_thread (
     diameter = 8,
     pitch = 1,
     length = 1,
     internal = false,
+    clearance = 0,
     n_starts = 1
 )
 {
+    // Tolerancing as per ISO 286
+    // See https://en.wikipedia.org/wiki/IT_Grade
+    function IT_grade (diameter, ITG) =
+        assert(ITG>=1, "ITG has to be between 1 and 16")
+        assert(ITG<=16, "ITG has to be between 1 and 16")
+        let (i = 0.45 * pow(diameter, 1/3) + 0.001 * diameter)
+            pow(10, 0.2*(ITG-1)) * i / 1000;
+
+    // Fundamental deviations as per ISO 286. Formulas obtained from:
+    // https://www.cobanengineering.com/Tolerances/ToleranceBand.asp
+    function EI_es_g (diameter) = 2.5 * pow(diameter, 0.34) / 1000;
+
+    theta = 60;                // V-shape angle, 60º for metric threads
+    H = pitch/2/tan(theta/2);  // height of the V-shape
+    tolerance = internal
+        ? IT_grade(diameter, 6)/2 + 0                  // H6
+        : IT_grade(diameter, 6)/2 + EI_es_g(diameter); // g6
+    D_maj = internal
+        ? diameter + tolerance + clearance
+        : diameter - tolerance - clearance;
+    D_min = D_maj - 2*5/8*H;
+
     trapezoidal_thread (
         pitch = pitch,
         length = length,
         upper_angle = 30, lower_angle = 30,
         outer_flat_length = pitch / 8,
-        major_radius = diameter / 2,
-        minor_radius = diameter / 2 - 5/8 * cos(30) * pitch,
+        major_radius = D_maj / 2,
+        minor_radius = D_min / 2,
         internal = internal,
         n_starts = n_starts
     );
+}
+
+/**
+ * Applies chamfers to a thread object. Expects 2 or 3 children.
+ *
+ * Children:
+ *   1) thread object
+ *   2) chamfer object at near end (Z = 0)
+ *   3) (optional) chamfer object at far end (Z = length)
+ * Parameters:
+ *   length   - axial length in mm of the thread object.
+ *   internal - true when the thread is internal, false when external.
+ */
+module chamfered_thread (length, internal = false)
+{
+    if (internal) {
+        union() {
+            children(0);
+            children(1);
+            if ($children == 3) {
+                translate([0,0,length]) rotate([180,0,0]) children(2);
+            }
+        }
+    }
+    else {
+        difference() {
+            children(0);
+            children(1);
+            if ($children == 3) {
+                translate([0,0,length]) rotate([180,0,0]) children(2);
+            }
+        }
+    }
+}
+
+/*
+ * Generates a revolved chamfer for a cylinder end face. For external
+ * cylinders this object can be subtracted from the cylinder. For
+ * internal cylinders, this object can be subtracted along with the
+ * cylinder from the original solid.
+ *
+ * cyl_diameter  - diameter of the cylinder to generate a chamfer for.
+ * chfr_diameter - max (min) diameter of the chamfer feature on internal
+ *                 (external) cylinders
+ * angle         - chamfer lead-in angle
+ * internal      - true when the cylinder is internal, false when external.
+ */
+module chamfer_cylinder (
+     cyl_diameter,
+     chfr_diameter,
+     angle = 45,
+     internal = false)
+{
+    // lead-in angle:
+    // external:            internal:
+    //
+    //    _d________|         ___d_         |
+    //   |  /       .a       |  \  |h       .a
+    //  h| /        |x       |   \ |        |x
+    //   |/ angle   .i       |    \| angle  .i
+    //   |          |s       |     |        |s
+
+    d = internal
+        ? (chfr_diameter - cyl_diameter) / 2
+        : (cyl_diameter - chfr_diameter) / 2;
+    assert (d > 0,
+            "On internal chamfers chfr_diameter must be bigger than \
+             cyl_diameter. While on external chamfers chfr_diameter must be \
+             smaller than cyl_diameter.");
+    h = d / tan(angle);
+
+    chamfer_profile = [
+        [chfr_diameter / 2,                            -0.001],
+        [cyl_diameter / 2 + (internal ? -1 : 1)*0.001, -0.001],
+        [cyl_diameter / 2 + (internal ? -1 : 1)*0.001,      h]
+    ];
+    rotate_extrude() polygon(chamfer_profile);
 }
 
 module square_thread (
@@ -134,7 +257,7 @@ module buttress_thread (
 }
 
 /**
- * trapezoid_thread():
+ * trapezoidal_thread():
  * generates a screw with a trapezoidal thread profile
  *
  * pitch = distance between the same part of adjacent teeth

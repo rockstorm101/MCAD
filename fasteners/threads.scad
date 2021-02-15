@@ -78,8 +78,8 @@ module metric_thread (
     pitch = 1,
     length = 1,
     internal = false,
-    clearance = 0,
-    n_starts = 1
+    n_starts = 1,
+    clearance
 )
 {
     // Tolerancing as per ISO 286
@@ -96,12 +96,14 @@ module metric_thread (
 
     theta = 60;                // V-shape angle, 60º for metric threads
     H = pitch/2/tan(theta/2);  // height of the V-shape
-    tolerance = internal
-        ? IT_grade(diameter, 6)/2 + 0                  // H6
-        : IT_grade(diameter, 6)/2 + EI_es_g(diameter); // g6
+    clearance = (clearance != undef)
+        ? clearance
+        : internal
+            ? IT_grade(diameter, 6)/2 + 0                  // H6
+            : IT_grade(diameter, 6)/2 + EI_es_g(diameter); // g6
     D_maj = internal
-        ? diameter + tolerance + clearance
-        : diameter - tolerance - clearance;
+        ? diameter + clearance
+        : diameter - clearance;
     D_min = D_maj - 2*5/8*H;
 
     trapezoidal_thread (

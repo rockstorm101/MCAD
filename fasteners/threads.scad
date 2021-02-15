@@ -74,9 +74,9 @@ use <../scad-utils/transformations.scad>
 // n_starts  - Number of thread starts (e.g., DNA, a "double helix," has
 //             n_starts=2).  See Wikipedia Screw_thread.
 module metric_thread (
-    diameter = 8,
-    pitch = 1,
-    length = 1,
+    diameter,
+    pitch,
+    length,
     internal = false,
     n_starts = 1,
     clearance

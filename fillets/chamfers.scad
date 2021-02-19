@@ -7,12 +7,12 @@ module test_chamfers ($fn=32)
     let(D = 12, H = 8) {
         difference() {
             cylinder(d=D, h=H);
-            mcad_chamfer_cylinder(diameter=d, length=1);
+            mcad_chamfer_cylinder(diameter=D, length=1);
         }
     }
 
     // cube with a cylindrical hole chamfered at both ends:
-    //  - near end with a lead-in chamfer of 30º
+    //  - near end with a lead-in chamfer of 30º and a depth of 1
     //  - far end with a chamfer defined by two lenghts
     translate ([20, 0, 0]) {
         let(S = 12, D = 8) {
@@ -20,7 +20,7 @@ module test_chamfers ($fn=32)
                 translate([0,0,S/2]) cube(S-0.002, center=true);
                 mcad_chamfered_cylinder(S, internal=true) {
                     cylinder(d=D, h=S);
-                    mcad_chamfer_cylinder(diameter=D, length=1, angle=30,
+                    mcad_chamfer_cylinder(diameter=D, depth=1, angle=30,
                                           internal=true);
                     mcad_chamfer_cylinder(diameter=D, length=1.5, depth=1,
                                           internal=true);
@@ -70,46 +70,58 @@ module mcad_chamfered_cylinder (length, internal = false)
  * internal cylinders, this object can be subtracted along with the
  * cylinder from the original solid.
  *
- * Chamfer definition is allowed by specifying either a length and an
- * angle; or a length and a depth/height.
+ * Chamfer definition is allowed by specifying either just the
+ * 'length', or any combination of two out of the three parameters
+ * 'length', 'angle' and 'depth'.
  *
  * @param diameter Diameter of the cylinder to generate a chamfer for.
  * @param length Chamfer length measured on the cylinder's end face.
  * @param angle (optional) Chamfer's lead-in angle in degrees. angle
- *      between the chamfer surface and the cylinder's axis.
+ *     between the chamfer surface and the cylinder's axis. (Default
+ *     is 45º)
  * @param depth (optional) Depth/height of the chamfer measured along
- *     the z axis from the cylinder's end face. if specified, the
- *     'angle' parameter will be ignored.
+ *     the z axis from the cylinder's end face.
  * @param internal (optional) True when the cylinder is internal.
  */
 module mcad_chamfer_cylinder (
      diameter,
      length,
-     angle = 45,
+     angle,
      depth,
      internal = false)
 {
-    // lead-in angle (alpha):
+    // lead-in angle ('a'):
     // external:            internal:
-    //              |         |
-    //   |          .a      a .    |          |
-    //   |\ alpha   |x      x |    |\ alpha   |
-    //  d| \        .i      i .   d| \        |
-    //   |__\_______|s      s |    |__\_______|
-    //    l         .         .      l
+    //    |      |            |   |      |
+    //  a .      |          a .   |      |
+    //  x |   a /|          x |   |\ a   |
+    //  i .    / |d         i .  d| \    |
+    //  s |___/__|          s |   |__\___|
+    //    .    l              .     l
 
     assert (diameter > 0, "'diameter' must be a positive number");
-    assert (length > 0, "'length' must be a positive number");
 
-    alpha = depth
-        ? atan(depth/length)
-        : angle;
+    // User Defined  | Calculated
+    // ------------    ----------
+    // length        | a = 45º, d = l
+    // length, angle | d = l/tan(a)
+    // length, depth | a = atan(l/d)
+    // angle,  depth | l = d*tan(a)
+    l = ( angle && depth )
+        ? depth * tan(angle)
+        : length;
+    a = angle
+        ? angle
+        : depth
+            ? atan(l/depth)  // Not really useful but calculated anyway
+            : 45;
     d = depth
         ? depth
-        : length / tan(angle);
+        : length / tan(a);
+
     chamfer_diameter = internal
-        ? diameter + 2 * length
-        : diameter - 2 * length;
+        ? diameter + 2 * l
+        : diameter - 2 * l;
 
     chamfer_profile = [
         [chamfer_diameter / 2,                     -0.001],

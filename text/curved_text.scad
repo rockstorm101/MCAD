@@ -130,7 +130,7 @@ module mcad_cylinder_text(diameter, t, depth, size = 10, font, halign,
  * @param halign Alignment of the text with respect to the 'Y' axis.
  *     Possible values are "left", "center" and "right". Default is
  *     "left". Note that the meaning of left/right might be
- *     counter-intuitive when parameter 'direction' is set to "rtl".
+ *     counter-intuitive when parameter 'direction' is set to "ccw".
  * @param spacing Factor to increase/decrease the character spacing.
  *     The default value of 1 results in a circular character spacing
  *     of about five-sevenths the 'size' parameter, regardless of the
